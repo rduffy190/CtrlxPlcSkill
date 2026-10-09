@@ -18,5 +18,7 @@ These notes cover the format produced by `scripts/st_to_plcopenxml.py`. You only
   - `ARRAY[*]` has no numeric bounds in PLCopen, so it's written as `<derived name="ARRAY[*] OF T"/>`.
   - `http://www.3s-software.com/plcopenxml/globalvars` holds `<globalVars name="GVL_X">` (GVLs).
   - Methods, properties and actions use further `3s-software` addData entries. The script doesn't generate those, so add such objects by hand after import.
+- LD bodies (`<body><LD>`) come from the codesys-lad skill's `scripts/ladder.py`. Its module docstring and that skill's `references/ladder.md` give the mapping, which was taken from real LD exports from CODESYS V3.5 SP15 and ctrlX PLC Engineering 3.6.5. Both exports validate against the PLCopen TC6 v2.01 XSD once its namespace is swapped from `tc6_0200` to `tc6_0201`, and so does the script's output. `scripts/validate_plcopen.py` does that check. `ElementType` / `CallType` / `InputParamTypes` markers are written with `xmlns=""`, as CODESYS does.
+- A POU's `InterfaceAsPlainText` goes where ctrlX PLC Engineering exports it: in the POU's own `addData` after `<body>`, and a copy in each var block's `addData`. (`interface/addData` holds only attributes.)
 - On import, CODESYS shows a tree of objects to choose from. Existing objects with the same name prompt for replacement.
 - ctrlX PLC Engineering is CODESYS-based, so the same import path (Project → Import PLCopenXML) should apply. This hasn't been verified on a real install yet.

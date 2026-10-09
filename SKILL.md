@@ -1,6 +1,6 @@
 ---
 name: codesys-st
-description: Write PLC code in IEC 61131-3 Structured Text for Bosch Rexroth ctrlX CORE (ctrlX PLC Engineering) and other CODESYS V3-based controllers. Produces paste-ready POUs (programs, function blocks, functions), DUTs and GVLs, and can also produce importable PLCopenXML files. Use this skill whenever the user wants PLC logic written or extended, even if they don't say "Structured Text", "ctrlX" or "CODESYS". That includes sequences, state machines, servo axes and ctrlX MOTION (MC_/ML_ commands, homing, positioning, gearing, cams, kinematics), motor/valve/pump control, conveyors, alarms, interlocks, PID loops, analog scaling, timers/counters, Modbus/IO mapping, reading or writing ctrlX Data Layer real-time (RT) nodes and memory maps (DL_MemUser, cyclic axis status, EtherCAT process image by name), or "write a function block that…". Also use it when someone describes a machine and asks how to program it.
+description: Write PLC code in IEC 61131-3 Structured Text for Bosch Rexroth ctrlX CORE (ctrlX PLC Engineering) and other CODESYS V3-based controllers. Produces paste-ready POUs (programs, function blocks, functions), DUTs and GVLs, and can also produce importable PLCopenXML files (ladder diagram is the codesys-lad skill, which uses this skill's converter). Use this skill whenever the user wants PLC logic written or extended, even if they don't say "Structured Text", "ctrlX" or "CODESYS". That includes sequences, state machines, servo axes and ctrlX MOTION (MC_/ML_ commands, homing, positioning, gearing, cams, kinematics), motor/valve/pump control, conveyors, alarms, interlocks, PID loops, analog scaling, timers/counters, Modbus/IO mapping, reading or writing ctrlX Data Layer real-time (RT) nodes and memory maps (DL_MemUser, cyclic axis status, EtherCAT process image by name), or "write a function block that…". Also use it when someone describes a machine and asks how to program it.
 ---
 
 # CODESYS Structured Text
@@ -36,7 +36,7 @@ The PLC runs your code top to bottom every scan, usually every 1–20 ms, foreve
   3. **on change**: `IF eState <> _eLastState`, holding the common actions and then the per-state entry actions;
   4. **cyclic**: all sub-FB calls (inputs driven from the state), then all outputs last (command values as boolean expressions of the state, and copies of internal values).
 
-  `references/patterns.md` §1 has the full template and the reasons for it. Read it before writing any sequence.
+  `references/patterns.md` §1 has the full template and the reasons for it. Read it before writing any sequence. For a sequence in ladder, use the codesys-lad skill.
 - **One writer per output.** Assign each physical output in exactly one place, in the output section at the end of the POU, after the sub-FB calls. If several places write it, the last one wins silently.
 - **No rising edges in sequences.** Commands are levels, and the state is the edge detector. A terminal state (`Done`, `Faulted`) holds until the command is removed, like PLCopen Execute/Done. One-shot actions go in the on-change section. An edge is lost if it arrives in the wrong step and can't be seen online. `R_TRIG` is only acceptable outside sequences, e.g. a simple counter on a sensor pulse.
 - **Fail safe.** Outputs should be de-energised by default and on fault. Treat broken-wire analog values (out of range) as faults. Clamp setpoints.
@@ -86,9 +86,14 @@ If the user wants a file to import (Project → Import PLCopenXML…), or the an
    ```bash
    python3 <skill-dir>/scripts/st_to_plcopenxml.py file1.st file2.st -o Project.xml
    ```
-3. Read the script's warnings, because some constructs (methods, properties, attributes on DUTs) aren't converted and must be added by hand. Tell the user about anything that was skipped.
+3. Optionally check the file against the PLCopen schema: `python3 <skill-dir>/scripts/validate_plcopen.py Project.xml` (needs lxml; downloads the schema once).
+4. Read the script's warnings, because some constructs (methods, properties, attributes on DUTs) aren't converted and must be added by hand. Tell the user about anything that was skipped.
 
 Read `references/plcopenxml.md` if you need to understand or extend the format.
+
+## Ladder (LD)
+
+Ladder is the **codesys-lad** skill, installed next to this one. It holds the ladder text language, its compiler and its examples. Its POUs build with this skill's `st_to_plcopenxml.py`, which loads the compiler from `codesys-lad/scripts/` whenever a POU body starts with `NETWORK`, so ST and LD objects can go in one import file.
 
 ## ctrlX library lookups
 

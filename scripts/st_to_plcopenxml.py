@@ -9,6 +9,10 @@ Supported top-level objects (one or more per file):
     TYPE ... END_TYPE            (STRUCT and enum DUTs; aliases emitted as derived types)
     VAR_GLOBAL ... END_VAR       (a GVL, named after the file stem)
 
+A POU whose implementation starts with NETWORK is ladder text and becomes an LD body; the
+ladder compiler lives in the codesys-lad skill (installed next to this one). Everything else
+is ST.
+
 Not converted (warned about): METHOD, PROPERTY, ACTION, INTERFACE, UNION, attributes on DUTs.
 Each POU also carries its declaration as plain text (CODESYS addData), which preserves
 comments and pragmas on import.
@@ -19,6 +23,13 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+# Ladder (LD) bodies are compiled by the codesys-lad skill, next to this one in the skills folder
+sys.path.append(str(Path(__file__).resolve().parents[2] / "codesys-lad" / "scripts"))
+try:
+    import ladder
+except ImportError:
+    ladder = None
 
 NS = "http://www.plcopen.org/xml/tc6_0200"
 XHTML = "http://www.w3.org/1999/xhtml"
@@ -217,7 +228,28 @@ def split_decl_body(rest: str):
     return "".join(lines[:i]), "".join(lines[i:])
 
 
-def add_pou(pous, attrs, kind, name, header_rest, rest, src_name):
+def declared_types(decl_text: str, where: str) -> dict:
+    """Lower-case variable name -> type text, for every VAR block in a declaration."""
+    types = {}
+    for m in VAR_BLOCK_RE.finditer(decl_text):
+        for names, tstr, *_ in parse_var_block(m.group(3), where):
+            for n in names:
+                types[n.lower()] = tstr
+    return types
+
+
+def fb_signature(decl_text: str, where: str) -> list:
+    """[(VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT, name, type)] in declaration order."""
+    sig = []
+    for m in VAR_BLOCK_RE.finditer(decl_text):
+        kind = m.group(1).upper()
+        if kind in ("VAR_INPUT", "VAR_OUTPUT", "VAR_IN_OUT"):
+            for names, tstr, *_ in parse_var_block(m.group(3), where):
+                sig += [(kind, n, tstr) for n in names]
+    return sig
+
+
+def add_pou(pous, attrs, kind, name, header_rest, rest, src_name, ld_ctx=None):
     kind_u = kind.upper()
     pou_type = {"PROGRAM": "program", "FUNCTION_BLOCK": "functionBlock",
                 "FUNCTION": "function"}[kind_u]
@@ -234,14 +266,24 @@ def add_pou(pous, attrs, kind, name, header_rest, rest, src_name):
         warnings.append(f"{name}: EXTENDS/IMPLEMENTS kept only in plain-text interface; verify after import")
     add_var_blocks(iface, decl, name)
     plain = f"{attrs}{kind_u} {name}{header_rest}\n{decl.lstrip(chr(10))}".rstrip() + "\n"
-    ad = sub(iface, "addData")
-    d = sub(ad, "data", name="http://www.3s-software.com/plcopenxml/interfaceasplaintext",
-            handleUnknown="implementation")
-    xhtml(ET.SubElement(d, "InterfaceAsPlainText"), plain)
+    # Where ctrlX PLC Engineering puts the plain-text declaration: in every var block and
+    # in the POU's own addData after the body
+    for blk in iface:
+        if blk.tag != q("returnType"):
+            plaintext_adddata(blk, plain)
     body = sub(pou, "body")
-    xhtml(sub(body, "ST"), impl.strip("\n") + "\n")
-    if UNSUPPORTED_RE.search(impl):
-        warnings.append(f"{name}: METHOD/PROPERTY/ACTION text found in body; add those objects manually")
+    if ladder is None and re.match(r"(\s*//[^\n]*\n)*\s*NETWORK\b", impl, re.I):
+        sys.exit(f"ERROR: {name} is ladder (starts with NETWORK), but the codesys-lad skill "
+                 "isn't installed next to codesys-st")
+    if ladder is not None and ladder.is_ladder(impl):
+        ctx = ladder.Context({**ld_ctx.var_types, **declared_types(decl, name)},
+                             ld_ctx.fb_sigs, warnings)
+        ladder.build_ld(body, impl, ctx, name)
+    else:
+        xhtml(sub(body, "ST"), impl.strip("\n") + "\n")
+        if UNSUPPORTED_RE.search(impl):
+            warnings.append(f"{name}: METHOD/PROPERTY/ACTION text found in body; add those objects manually")
+    plaintext_adddata(pou, plain)
 
 
 def plaintext_adddata(parent, text):
@@ -309,15 +351,26 @@ def build(files, project_name):
     instances = sub(root, "instances")
     sub(instances, "configurations")
     gvls = []
+    sources = {path: Path(path).read_text(encoding="utf-8-sig") for path in files}
+
+    # Ladder boxes need the FB interfaces (power-flow pins) and instance types up front
+    ld_ctx = ladder.Context({}, {}, warnings) if ladder else None
+    for src in sources.values():
+        for m in POU_RE.finditer(src):
+            if ld_ctx and m.group(2).upper() == "FUNCTION_BLOCK":
+                decl, _ = split_decl_body(m.group(5))
+                ld_ctx.fb_sigs[m.group(3).upper()] = fb_signature(decl, m.group(3))
+        for m in GVL_RE.finditer(POU_RE.sub("", src)) if ld_ctx else ():
+            ld_ctx.var_types.update(declared_types(m.group(0), "GVL"))
 
     for path in files:
-        src = Path(path).read_text(encoding="utf-8-sig")
+        src = sources[path]
         consumed = src
         for m in TYPE_RE.finditer(src):
             add_types(data_types, m.group(2), m.group(1), path, m.group(0))
             consumed = consumed.replace(m.group(0), "")
         for m in POU_RE.finditer(consumed):
-            add_pou(pous, m.group(1), m.group(2), m.group(3), m.group(4), m.group(5), path)
+            add_pou(pous, m.group(1), m.group(2), m.group(3), m.group(4), m.group(5), path, ld_ctx)
         remaining = POU_RE.sub("", consumed)
         blocks = [m.group(0) for m in GVL_RE.finditer(remaining)]
         if blocks:
@@ -354,15 +407,22 @@ def main():
     ap.add_argument("-o", "--output", required=True)
     ap.add_argument("--name", default=None, help="project name in contentHeader")
     a = ap.parse_args()
-    root = build(a.files, a.name or Path(a.output).stem)
+    try:
+        root = build(a.files, a.name or Path(a.output).stem)
+    except Exception as e:
+        if ladder is None or not isinstance(e, ladder.LadderError):
+            raise
+        sys.exit(f"ERROR: {e}")
     ET.indent(root)
     xml = ET.tostring(root, encoding="unicode")
     # Match CODESYS's own exports: default-namespaced <xhtml> rather than an html: prefix
     xml = xml.replace(f' xmlns:html="{XHTML}"', "", 1)
     xml = xml.replace("<html:xhtml>", f'<xhtml xmlns="{XHTML}">').replace("</html:xhtml>", "</xhtml>")
     xml = xml.replace("<html:xhtml />", f'<xhtml xmlns="{XHTML}" />')
+    # CODESYS writes its LD/FBD element-type markers in no namespace
+    xml = re.sub(r"<(ElementType|CallType|InputParamTypes|ParallelBranch)\b", r'<\1 xmlns=""', xml)
     Path(a.output).write_text('<?xml version="1.0" encoding="utf-8"?>\n' + xml + "\n", encoding="utf-8")
-    for w in warnings:
+    for w in dict.fromkeys(warnings):
         print("WARNING:", w, file=sys.stderr)
     print(f"Wrote {a.output}")
 
