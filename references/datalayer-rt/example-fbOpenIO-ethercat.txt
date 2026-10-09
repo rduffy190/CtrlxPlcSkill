@@ -1,0 +1,112 @@
+{attribute 'no_assign'}
+FUNCTION_BLOCK fbOpenIO
+VAR_INPUT
+	bExecute: BOOL;
+	instIOMap: iMap;
+END_VAR
+VAR_OUTPUT
+	bDone: BOOL;
+	bError: BOOL;
+	bActive: BOOL;
+	inMapRev: UDINT;
+	outMapRev: UDINT;
+	uiErrorStep: UINT;
+END_VAR
+VAR_IN_OUT
+	instMemUserInputs: DL_MemUser;
+	InstMemUserOutputs: DL_MemUser;
+END_VAR
+VAR
+	_varCount: UDINT;
+	_uiNextState: UINT;
+	_uiState: UINT;
+	_sEcatInNode: STRING(255) := 'fieldbuses/ethercat/master/instances/ethercatmaster/realtime_data/input';
+	_MapNode: DL_NODEVALUE;
+	_memMap: comm_datalayer_MemoryMap;
+	_var: comm_datalayer_Variable;
+	_i: UDINT;
+	_sVarName: STRING(255);
+	_arVarNames: ARRAY[0..1] OF POINTER TO STRING(255);
+	_stIO: typeIOConfig;
+	_sEcatOutNode: STRING(255) := 'fieldbuses/ethercat/master/instances/ethercatmaster/realtime_data/output';
+END_VAR
+VAR CONSTANT
+	IDLE: UINT := 0;
+	OPEN_MEMORY: UINT := 1;
+	GET_IN_MAP: UINT := 2;
+	GET_OUT_MAP: UINT := 3;
+	DONE: UINT := 4;
+	ERROR: UINT := 5;
+END_VAR
+
+
+=====================IMPL=================================================
+_uiNextState := _uiState; 
+CASE _uiState OF 
+	IDLE: 
+		IF bExecute THEN 
+			_uiNextState := OPEN_MEMORY; 
+		END_IF
+	OPEN_MEMORY: 
+		IF instMemUserInputs.OpenMemory(_sEcatInNode) = DL_RESULT.DL_OK  AND 
+		   instMemUserOutputs.OpenMemory(_sEcatOutNode) = DL_RESULT.DL_OK THEN  
+			_uiNextState := GET_IN_MAP; 
+		ELSE 
+			instMemUserInputs.CloseMemory(); 
+			instMemUserOutputs.CloseMemory(); 
+			_uiNextState := ERROR;
+			uiErrorStep := OPEN_MEMORY; 
+		END_IF
+	GET_IN_MAP: 
+		IF instMemUserInputs.GetMemoryMap(_MapNode) = DL_RESULT.DL_OK THEN 
+			_memMap.getRootAsMemoryMap(_MapNode.GetData(), _MapNode.GetSize()); 
+			_varCount := _memMap.getVariablesLength(); 
+			_i := 0; 
+			WHILE _i < _varCount DO 
+				_memMap.getVariables(_i,ADR(_var)); 
+				_sVarName := _var.getName(); 
+				IL_StrSplit(ADR(_sVarName), '.',2,FALSE,ADR(_arVarNames),SIZEOF(_arVarNames)); 
+				IF instIOMap.Get(ADR(_arVarNames[1]^),ADR(_stIO)) THEN 
+					_stIO.udOffset := _var.getBitoffset(); 
+					_stIO.bExists := TRUE; 
+					instIOMap.Put(ADR(_arVarNames[1]^),ADR(_stIO));
+				END_IF
+				_i := _i + 1;
+			END_WHILE
+			inMapRev := _memMap.getRevision(); 
+			_uiNextState := GET_OUT_MAP; 
+		ELSE 
+			_uiNextState := ERROR;
+			uiErrorStep := GET_IN_MAP;  
+		END_IF
+	GET_OUT_MAP: 
+		IF instMemUserOutputs.GetMemoryMap(_MapNode) = DL_RESULT.DL_OK THEN 
+			_memMap.getRootAsMemoryMap(_MapNode.GetData(), _MapNode.GetSize()); 
+			_varCount := _memMap.getVariablesLength(); 
+			_i := 0; 
+			WHILE _i < _varCount DO 
+				_memMap.getVariables(_i,ADR(_var)); 
+				_sVarName := _var.getName(); 
+				IL_StrSplit(ADR(_sVarName), '.',2,FALSE,ADR(_arVarNames),SIZEOF(_arVarNames)); 
+				IF instIOMap.Get(ADR(_arVarNames[1]^),ADR(_stIO)) THEN 
+					_stIO.udOffset := _var.getBitoffset(); 
+					_stIO.bExists := TRUE; 
+					instIOMap.Put(ADR(_arVarNames[1]^),ADR(_stIO));
+				END_IF
+				_i := _i + 1;
+			END_WHILE
+			outMapRev := _memMap.getRevision(); 
+			_uiNextState := Done; 
+		ELSE 
+			_uiNextState := ERROR;
+			uiErrorStep := GET_OUT_MAP;  
+		END_IF
+	DONE, ERROR: 
+		IF NOT bExecute THEN 
+			_uiNextState := IDLE; 
+		END_IF
+END_CASE
+_uiState := _uiNextState; 
+bDone := _uiState = DONE; 
+bError := _uiState = ERROR; 
+bActive := _uiState <> DONE AND _uiState <> IDLE AND _uiState <> ERROR; 

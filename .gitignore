@@ -1,0 +1,5 @@
+# Source PDFs (public Rexroth manuals, 45 MB). Download them again to regenerate references/.
+docs/*.pdf
+
+__pycache__/
+*.pyc
