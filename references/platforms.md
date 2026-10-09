@@ -25,4 +25,4 @@ The ST language is nearly identical across these targets. The main differences a
 
 ## Reading a Data Layer RT memory map on the PLC
 
-See `datalayer-rt.md`. It covers the API, the map FB plus per-item reader architecture, name parsing, the packed-buffer copy and output nodes.
+See `datalayer-rt.md`. It covers the API, the map FB plus single-access reader architecture, name parsing, the packed-buffer copy and output nodes.

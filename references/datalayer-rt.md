@@ -58,13 +58,15 @@ The rules:
 - These methods **block** (they're direct runtime calls). Open the node and parse the map **once**, in an on-change (entry) action, never every scan. `BeginAccess`/`EndAccess` every scan is what they are for.
 - `OpenMemory` and `CloseMemory` go in pairs. The user example closes even after a failed open, which is safe.
 
-## Architecture: one map FB, one reader per item
+## Architecture: one map FB, one reader for all items
 
 ```
-FB_<X>RtMap  --(ST_<X>RtConfig)-->  FB_<X>RtRead[i]  -->  astOut[i]
-     ^                                      |
-     +------------- bReadFault -------------+
+FB_<X>RtMap  --(ST_<X>RtConfig)-->  FB_<X>RtRead  -->  astOut[0..LAST_ITEM]
+     ^                                    |
+     +------------ bReadFault ------------+
 ```
+
+**One `BeginAccess`/`EndAccess` per node per scan.** Each access is a runtime call that locks the buffer against the writer (motion, fieldbus), so don't take one per item. A single reader loops over every item inside one access. That also gives a consistent snapshot: every item comes from the same buffer state.
 
 1. **A field table in a GVL** (`qualified_only`, constants): the node name, the name separator, `BITS_PER_BYTE`, the field indices `F_*` (0..LAST_FIELD) and `asFieldName : ARRAY[0..LAST_FIELD] OF STRING(31)` in the same order. This table is the only place the map names appear.
 2. **Config DUTs:**
@@ -79,13 +81,14 @@ FB_<X>RtMap  --(ST_<X>RtConfig)-->  FB_<X>RtRead[i]  -->  astOut[i]
    - Entry of `IDLE`/`FAULT`: close (if `OpenMemory` was called) and clear the config.
    - `FAULT` goes back to `OPEN` after a retry `TON` (e.g. 1 s), so a reconfigured map recovers by itself.
    - `config.bValid` is TRUE only in `READY`.
-4. **The reader FB** handles one item per call: one instance per item, every scan, after the map FB.
-   - Inputs: the index. `VAR_IN_OUT`: the `DL_MemUser` and the output array. `VAR_IN_OUT CONSTANT`: the config.
-   - While the config is valid and the item is complete: `BeginAccess`, `GetSize`, copy each field with a bounds check, `EndAccess`.
-   - It writes **only `astOut[index]`**, and clears it when the read fails, so a validity flag in the output (e.g. `DataValid`) goes FALSE.
+4. **The reader FB** is one instance, called every scan after the map FB.
+   - `VAR_IN_OUT`: the `DL_MemUser` and the output array. `VAR_IN_OUT CONSTANT`: the config.
+   - It starts every scan by clearing each item in an internal copy of the output array, so a validity flag in the output (e.g. `DataValid`) is FALSE unless that item is copied this scan.
+   - While the config is valid: one `BeginAccess`, one `GetSize`, then a `FOR` loop over the items. Each item that's complete in the map is copied field by field with a bounds check into a temporary struct. Only when every field succeeds does that struct go into the item's slot. Then one `EndAccess`.
+   - The outputs are written last: the whole array, `bValid` (the access worked and every complete item was copied), `bError`, `abValid[i]`, `abNotInMap[i]` and `eResult`.
    - `bError` means an access failure or a field outside the buffer. Feed it back to `bReadFault` so the map FB remaps.
-   - `bNotInMap` means the item isn't complete in the map. It does **not** trigger a remap, so the other items keep being read.
-5. **The caller** (a PRG) owns the `DL_MemUser` and the config. It calls the map FB, then loops over the readers and ORs their `bError` into the next scan's `bReadFault`.
+   - `abNotInMap[i]` means the item isn't complete in the map. It does **not** trigger a remap, so the other items keep being read.
+5. **The caller** (a PRG) owns the `DL_MemUser` and the config. It calls the map FB with `bReadFault := fbRead.bError` (last scan's value), then calls the reader.
 
 ### Parsing names (inside the GET_MAP entry action)
 
@@ -148,7 +151,7 @@ IF Fn_RtCopy THEN
 END_IF
 ```
 
-In the reader, write one line per field, with `Fn_RtCopy` *first* in the AND so it always runs:
+In the reader's item loop, write one line per field, with `Fn_RtCopy` *first* in the AND so it always runs:
 `_bOk := Fn_RtCopy(pData := _pData, udiDataSize := _udiSize, udiOffset := _stOfs.audiOffset[GVL_XRtMap.F_ACTUAL_POS], pDst := ADR(_stOut.ActualPos), udiSize := SIZEOF(_stOut.ActualPos)) AND _bOk;`
 
 `SIZEOF(destination)` must equal the map's `bitsize / 8` for that field. Check it against `dl.py rtmap` when you write the output struct (LREAL = float64, WORD/UINT = uint16, UDINT/DWORD = uint32, BOOL = bool8).
@@ -162,7 +165,7 @@ The pattern is the same with the copy reversed (`pSrc := ADR(local)`, `pDst := p
 
 ## Worked example
 
-`~/Dev/Plc` reads the cyclic axis status like this, one reader per axis (`src/Servo/`):
+`~/Dev/Plc` reads the cyclic axis status like this, with one reader covering all axes in one access (`src/Servo/`):
 - `GVL_AxisRtMap`, `ST_AxisRtOffsets`, `ST_AxisRtConfig`;
 - `Fn_RtCopy`, `FB_AxisRtMap`, `FB_AxisRtRead`;
 - the wiring in `src/Main/PRG_Main.st`.

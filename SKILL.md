@@ -117,7 +117,7 @@ The full Motion App manual (chapters 4–7) is in `references/motion/`. Look up 
 
 When the user wants values from a ctrlX real-time Data Layer node instead of I/O mapping, read `references/datalayer-rt.md` first. Examples are the cyclic axis status (`motion/realtime/cyclicStatusData`), the EtherCAT process image (`.../realtime_data/input|output`), or any node with a `/map`. It gives:
 - the verified `DL_MemUser` / `comm_datalayer_MemoryMap` calls;
-- the house architecture: one map FB builds a config struct of offsets, and one reader FB per item writes the output array at the same index;
+- the house architecture: one map FB builds a config struct of offsets, and one reader FB reads every item in a single `BeginAccess`/`EndAccess` into the output array, at the same indices;
 - the name parsing, the packed-buffer copy helper and the retry/remap handling.
 
 Inspect the real map with the `ctrlx-rest` skill (`dl.py rtmap <node>`) before writing the field table.
