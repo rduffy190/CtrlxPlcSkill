@@ -94,7 +94,7 @@ The poll is gated on the state because `ML_GetCmdState` is a function, not an FB
 
 ## PLCopen MC_ FBs in practice (CXA_PLCopen)
 
-`examples/FB_AxisCtrl.st` is a ready axis wrapper (a ladder version, scan-tested, is in the codesys-lad skill's `references/examples/FB_AxisCtrl.st`): power, absolute move, halt, reset and status, with a latched first error and its ctrlX diagnosis. Copy it instead of re-deriving these points:
+`examples/FB_AxisCtrl.st` is a ready axis wrapper (a ladder version, compiled and run on ctrlX, is in the codesys-lad skill's `references/examples/FB_AxisCtrl.st`): power, absolute move, halt, reset and status, with a latched first error and its ctrlX diagnosis. Copy it instead of re-deriving these points:
 
 - **Axis reference**: `stLift : AXIS_REF := (AxisName := 'BeamLift');` in a GVL (type from CXA_CommonTypes, `AxisName : STRING(15)`). It is passed as `Axis := stLift` (a VAR_IN_OUT), so an FB that wraps axes takes `stAxis : AXIS_REF` in `VAR_IN_OUT`. Create or check the axes on the controller with the ctrlx-rest skill (`motion_axes.py`).
 - **Units**: MC_ positions and dynamics are in the axis' **configured default units** (`motion/axs/<ax>/cfg/units`). A new axis defaults to mm, mm/min, m/s² and m/s³, so check them before choosing setpoint units.
@@ -103,7 +103,7 @@ The poll is gated on the state because `ML_GetCmdState` is a function, not an FB
 - **Power/ReadStatus errors need a new Enable edge.** If motion isn't RUNNING yet (boot, SETUP), `MC_Power`/`MC_ReadStatus` latch Error until Enable re-edges. Drop Enable for one scan on reset: `Enable := bPower AND NOT (_fbPower.Error AND bReset)`. Enable the readers only while powered, so an unpowered system doesn't fault at boot.
 - **Execute errors clear when Execute drops.** Latch the first `ErrorID`/`ErrorIdent.Additional1/2` in the wrapper, or the info is gone once the sequence drops Execute on entering Faulted. Also latch `MC_ReadStatus.ErrorStop` as a fault (drive error during motion; details in the ctrlX diagnostics log).
 - **MC_Reset**: `Execute := bReset AND _fbStatus.ErrorStop`. Clear the latched error only when `bReset AND NOT ErrorStop AND NOT _fbReset.Active`.
-- **MC_Halt**: don't execute it on an unpowered axis or one in ErrorStop (it errors, and the drive has already stopped). Gate it with `_fbPower.Status AND NOT _fbStatus.ErrorStop`. The manual's interface table names its axis pin `Axes` (InOut Const) while the value table says `Axis`. `Axis` is assumed, so check it at the first compile.
+- **MC_Halt**: don't execute it on an unpowered axis or one in ErrorStop (it errors, and the drive has already stopped). Gate it with `_fbPower.Status AND NOT _fbStatus.ErrorStop`. The pin is `Axis`: the manual's interface table calls it `Axes`, but `Axis` compiled and ran on ctrlX PLC Engineering 4.6 (2026-10-10).
 - **BufferMode**: `MC_BUFFER_MODE.mcAborting` (default, single axis) or `mcBuffered`. Blending isn't supported on single axes.
 - **Power-off with a vertical axis**: in a sequence, exit Faulted on reset straight to the power-on step when still enabled, rather than through a Disabled step. Otherwise power drops for a scan.
 

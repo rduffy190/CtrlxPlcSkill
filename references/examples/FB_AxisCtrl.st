@@ -1,5 +1,6 @@
-// Example from the PressSystem project (2026-10-09). Built to PLCopenXML and schema-valid; NOT yet compiled
-// in ctrlX PLC Engineering. If MC_Halt's axis pin fails to compile, the manual also names it 'Axes'.
+// Example from the PressSystem project (2026-10-09). Built to PLCopenXML and schema-valid. This ST version was
+// not run itself, but its MC_ blocks, pins and handshakes are the ones the ladder version uses, which was
+// compiled and run on ctrlX (2026-10-10; codesys-lad references/examples/FB_AxisCtrl.st).
 // FB_AxisCtrl: one ctrlX axis through CXA_PLCopen: power, absolute move, halt, reset and status.
 // Latches the first error with its ctrlX diagnosis until reset. Not a sequence; the caller drives it.
 FUNCTION_BLOCK FB_AxisCtrl
