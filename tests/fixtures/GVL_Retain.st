@@ -1,0 +1,3 @@
+VAR_GLOBAL PERSISTENT RETAIN
+    lrOffset    : LREAL := 0.25;
+END_VAR

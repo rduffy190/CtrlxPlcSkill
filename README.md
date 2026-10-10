@@ -40,9 +40,11 @@ Optional companions, cloned next to it:
 | `references/libs/` | ctrlX PLC Libraries reference book, one file per library, with an `INDEX.md` |
 | `references/datalayer-rt.md` | Reading Data Layer RT nodes and memory maps |
 | `references/plcopenxml.md` | The PLCopenXML format as CODESYS and ctrlX PLC Engineering write it |
+| `references/examples/FB_AxisCtrl.st` | A ready ctrlX MC_ axis wrapper in ST (power, move, halt, reset, latched diagnosis) |
 | `scripts/st_to_plcopenxml.py` | Builds `.st` sources (POUs, DUTs, GVLs, and ladder POUs via codesys-lad) into one import file |
 | `scripts/validate_plcopen.py` | Checks a PLCopenXML file against the PLCopen TC6 schema (downloads it once) |
 | `scripts/pdf_to_libref.py` | Regenerates `references/libs/` and `references/motion/` from the Rexroth PDFs |
+| `tests/run.sh`, `tests/fixtures/` | Regression suite: converter fixtures checked structurally and against the schema, the shipped example, and (when the PDFs are in `docs/`) a byte-for-byte check that the references regenerate identically |
 
 ## Building an import file yourself
 
@@ -52,6 +54,12 @@ python3 ~/.claude/skills/codesys-st/scripts/validate_plcopen.py Project.xml
 ```
 
 Each `.st` file holds full source with the `END_...` keywords. A GVL file is named after the GVL.
+
+## Tests
+
+```bash
+~/.claude/skills/codesys-st/tests/run.sh      # should end with ALL OK
+```
 
 ## Regenerating the manual references
 

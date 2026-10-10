@@ -116,6 +116,10 @@ For anything that moves an axis, including power, homing, positioning, jogging, 
 - why `ML_` functions must be called **once** per command and then tracked by CmdID, never called every scan like an FB;
 - buffered vs unbuffered commands, the axis state machine, and how errors are handled.
 
+For MC_ FBs, `references/examples/FB_AxisCtrl.st` is a ready axis wrapper. The "PLCopen MC_ FBs in practice" section explains it: re-edging Execute between consecutive moves, gating Done, error latching, reset and halt.
+
+To create or check the axes themselves on a controller (names, units, limits, virtual vs real, saving), use the ctrlx-rest skill: `scripts/motion_axes.py` and `references/motion-config.md`.
+
 The full Motion App manual (chapters 4–7) is in `references/motion/`. Look up commands and their `ML_` PLC functions in `references/motion/INDEX.md`, then read just that command's section. Each section covers what the command does, its "PLC:" interface structs, and the Data Layer and Python equivalents.
 
 ## Data Layer RT memory maps (reading I/O and status by name)
@@ -126,6 +130,15 @@ When the user wants values from a ctrlX real-time Data Layer node instead of I/O
 - the name parsing, the packed-buffer copy helper and the retry/remap handling.
 
 Inspect the real map with the `ctrlx-rest` skill (`dl.py rtmap <node>`) before writing the field table.
+
+## Regression tests
+
+`tests/run.sh` covers:
+- `st_to_plcopenxml.py` on `tests/fixtures/`: enums, structs, every GVL kind, FB/FUNCTION/PROGRAM and all var blocks. The output is checked structurally by `tests/check_st.py`, against the PLCopen schema, and for its expected warnings.
+- The shipped example `references/examples/FB_AxisCtrl.st`.
+- `pdf_to_libref.py`, which must regenerate `references/libs` and `references/motion` byte-identical from `docs/*.pdf`.
+
+Run it after changing any script here, and add a fixture plus an assertion for every new construct the converter learns. Ladder is tested separately by `../codesys-lad/tests/run.sh`.
 
 ## Regenerating the references
 
