@@ -4,7 +4,8 @@
 #     PROGRAM, all var blocks), checked structurally (check_st.py), against the PLCopen schema, and for
 #     the expected warnings;
 #  2. the shipped example references/examples/FB_AxisCtrl.st builds and validates;
-#  3. pdf_to_libref.py regenerates references/libs and references/motion byte-identical from docs/*.pdf
+#  3. plceng.py (PLC Engineering API client) against the mock tests/mock_plceng.py;
+#  4. pdf_to_libref.py regenerates references/libs and references/motion byte-identical from docs/*.pdf
 #     (skipped if the PDFs or pdftotext are missing).
 # The ladder side is tested by ../codesys-lad/tests/run.sh. Exits non-zero on any failure.
 set -euo pipefail
@@ -26,6 +27,9 @@ done
 echo "== converter: shipped example FB_AxisCtrl"
 python3 "$ST/scripts/st_to_plcopenxml.py" ST_Dynamics.st "$ST/references/examples/FB_AxisCtrl.st" -o "$OUT/axis.xml" 2>/dev/null
 python3 "$ST/scripts/validate_plcopen.py" "$OUT/axis.xml"
+
+echo "== plceng.py: PLC Engineering API client against the mock"
+python3 "$ST/tests/test_plceng.py"
 
 echo "== pdf_to_libref: references regenerate identically"
 LIBS_PDF="$ST/docs/R911430583_01_EN_ctrlX PLC Engineering, PLC Libraries 03VRS, Reference Book.pdf"

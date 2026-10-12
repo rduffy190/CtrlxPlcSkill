@@ -1,6 +1,6 @@
 ---
 name: ctrlx-engineer
-description: Write PLC code in IEC 61131-3 Structured Text for Bosch Rexroth ctrlX CORE (ctrlX PLC Engineering) and other CODESYS V3-based controllers. Produces paste-ready POUs (programs, function blocks, functions), DUTs and GVLs, and can also produce importable PLCopenXML files (ladder diagram is the codesys-lad skill, which uses this skill's converter). Use this skill whenever the user wants PLC logic written or extended, even if they don't say "Structured Text", "ctrlX" or "CODESYS". That includes sequences, state machines, servo axes and ctrlX MOTION (MC_/ML_ commands, homing, positioning, gearing, cams, kinematics), motor/valve/pump control, conveyors, alarms, interlocks, PID loops, analog scaling, timers/counters, Modbus/IO mapping, reading or writing ctrlX Data Layer real-time (RT) nodes and memory maps (DL_MemUser, cyclic axis status, EtherCAT process image by name), or "write a function block that…". Also use it when someone describes a machine and asks how to program it.
+description: Write PLC code in IEC 61131-3 Structured Text for Bosch Rexroth ctrlX CORE (ctrlX PLC Engineering) and other CODESYS V3-based controllers. Produces paste-ready POUs (programs, function blocks, functions), DUTs and GVLs, can also produce importable PLCopenXML files, and can push code into the open ctrlX PLC Engineering project, build and save it over the PLC Engineering REST API (ladder diagram is the codesys-lad skill, which uses this skill's converter). Use this skill whenever the user wants PLC logic written or extended, even if they don't say "Structured Text", "ctrlX" or "CODESYS". That includes sequences, state machines, servo axes and ctrlX MOTION (MC_/ML_ commands, homing, positioning, gearing, cams, kinematics), motor/valve/pump control, conveyors, alarms, interlocks, PID loops, analog scaling, timers/counters, Modbus/IO mapping, reading or writing ctrlX Data Layer real-time (RT) nodes and memory maps (DL_MemUser, cyclic axis status, EtherCAT process image by name), or "write a function block that…". Also use it when someone describes a machine and asks how to program it.
 ---
 
 # CODESYS Structured Text
@@ -91,6 +91,15 @@ If the user wants a file to import (Project → Import PLCopenXML…), or the an
 
 Read `references/plcopenxml.md` if you need to understand or extend the format.
 
+## Pushing code into ctrlX PLC Engineering (REST API)
+
+ctrlX PLC Engineering has a REST API (the "PLC Engineering API", port 9004 on the user's engineering PC). Use it when the user wants code put into the open project, built or saved directly, instead of handing them a file. `scripts/plceng.py` wraps it, so you don't need to read the spec. `references/plc-engineering-api.md` has the interface notes, quirks and job list. Read it before using an endpoint the script doesn't cover.
+
+- **Ask for the engineering PC's IP** unless the user gave it in this conversation; there's no default. Run with `PLCENG_URL=<ip>`.
+- **If it can't connect, offer the reverse SSH tunnel.** The script prints the exact `ssh -N -R 9004:localhost:9004 <user>@<this-ip>` command for the user to run on the engineering PC, after which `PLCENG_URL=localhost:9004` works. A firewall dropping port 9004 is the usual cause, and it's often IT-managed.
+- The workflow is `info` → `export-xml` backup → `push src/*.st` (`--dry-run` first, `--prune` only when asked to remove the old code) → `lib-add` → `task` → `build` → `save` only when asked. `push` takes the same `.st` files as `st_to_plcopenxml.py` and updates existing objects in place. The import XML job can't be used from here, because it reads the file from the engineering PC's disk.
+- Saving, logging in, downloading and starting change the user's project or controller. Do each one only when the user asks.
+
 ## Ladder (LD)
 
 Ladder is the **codesys-lad** skill, installed next to this one. It holds the ladder text language, its compiler and its examples. Its POUs build with this skill's `st_to_plcopenxml.py`, which loads the compiler from `codesys-lad/scripts/` whenever a POU body starts with `NETWORK`, so ST and LD objects can go in one import file.
@@ -136,6 +145,7 @@ For the cyclic axis status, the per-axis field layout is the same on every contr
 `tests/run.sh` covers:
 - `st_to_plcopenxml.py` on `tests/fixtures/`: enums, structs, every GVL kind, FB/FUNCTION/PROGRAM and all var blocks. The output is checked structurally by `tests/check_st.py`, against the PLCopen schema, and for its expected warnings.
 - The shipped example `references/examples/FB_AxisCtrl.st`.
+- `plceng.py` against `tests/mock_plceng.py`, a mock of the PLC Engineering API with the real server's quirks (PUT appends task calls, call objects can't be deleted, duplicate POST is 400).
 - `pdf_to_libref.py`, which must regenerate `references/libs` and `references/motion` byte-identical from `docs/*.pdf`.
 
 Run it after changing any script here, and add a fixture plus an assertion for every new construct the converter learns. Ladder is tested separately by `../codesys-lad/tests/run.sh`.
