@@ -1,4 +1,4 @@
-# codesys-st
+# ctrlx-engineer
 
 A [Claude Code](https://claude.com/claude-code) skill for writing PLC code in IEC 61131-3 Structured Text for Bosch Rexroth **ctrlX CORE** (ctrlX PLC Engineering) and other CODESYS V3 controllers.
 
@@ -11,7 +11,7 @@ For ladder diagram (LD), install [codesys-lad](https://github.com/rduffy190/Ctrl
 Clone into your Claude Code skills folder, under this exact name:
 
 ```bash
-git clone git@github.com:rduffy190/CtrlxPlcSkill.git ~/.claude/skills/codesys-st
+git clone git@github.com:rduffy190/CtrlxPlcSkill.git ~/.claude/skills/ctrlx-engineer
 ```
 
 Claude Code picks the skill up automatically. Ask for PLC logic ("write a function block for a pump with run feedback") and it's used.
@@ -49,8 +49,8 @@ Optional companions, cloned next to it:
 ## Building an import file yourself
 
 ```bash
-python3 ~/.claude/skills/codesys-st/scripts/st_to_plcopenxml.py E_State.st GVL_IO.st FB_Pump.st PRG_Main.st -o Project.xml
-python3 ~/.claude/skills/codesys-st/scripts/validate_plcopen.py Project.xml
+python3 ~/.claude/skills/ctrlx-engineer/scripts/st_to_plcopenxml.py E_State.st GVL_IO.st FB_Pump.st PRG_Main.st -o Project.xml
+python3 ~/.claude/skills/ctrlx-engineer/scripts/validate_plcopen.py Project.xml
 ```
 
 Each `.st` file holds full source with the `END_...` keywords. A GVL file is named after the GVL.
@@ -58,7 +58,7 @@ Each `.st` file holds full source with the `END_...` keywords. A GVL file is nam
 ## Tests
 
 ```bash
-~/.claude/skills/codesys-st/tests/run.sh      # should end with ALL OK
+~/.claude/skills/ctrlx-engineer/tests/run.sh      # should end with ALL OK
 ```
 
 ## Regenerating the manual references

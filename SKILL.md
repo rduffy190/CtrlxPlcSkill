@@ -1,5 +1,5 @@
 ---
-name: codesys-st
+name: ctrlx-engineer
 description: Write PLC code in IEC 61131-3 Structured Text for Bosch Rexroth ctrlX CORE (ctrlX PLC Engineering) and other CODESYS V3-based controllers. Produces paste-ready POUs (programs, function blocks, functions), DUTs and GVLs, and can also produce importable PLCopenXML files (ladder diagram is the codesys-lad skill, which uses this skill's converter). Use this skill whenever the user wants PLC logic written or extended, even if they don't say "Structured Text", "ctrlX" or "CODESYS". That includes sequences, state machines, servo axes and ctrlX MOTION (MC_/ML_ commands, homing, positioning, gearing, cams, kinematics), motor/valve/pump control, conveyors, alarms, interlocks, PID loops, analog scaling, timers/counters, Modbus/IO mapping, reading or writing ctrlX Data Layer real-time (RT) nodes and memory maps (DL_MemUser, cyclic axis status, EtherCAT process image by name), or "write a function block that…". Also use it when someone describes a machine and asks how to program it.
 ---
 

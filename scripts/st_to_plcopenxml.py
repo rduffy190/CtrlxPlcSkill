@@ -3,6 +3,10 @@
 
 Usage:
     st_to_plcopenxml.py file1.st [file2.st ...] -o Project.xml [--name ProjectName]
+                        [--lib Signatures.st ...]
+
+--lib files hold FUNCTION / FUNCTION_BLOCK declarations of library POUs (e.g. ML_AxsPower).
+They're read for ladder calls only (pin names, types, VAR_IN_OUTs) and not put in the project.
 
 Supported top-level objects (one or more per file):
     PROGRAM / FUNCTION_BLOCK / FUNCTION ... END_PROGRAM / END_FUNCTION_BLOCK / END_FUNCTION
@@ -274,10 +278,10 @@ def add_pou(pous, attrs, kind, name, header_rest, rest, src_name, ld_ctx=None):
     body = sub(pou, "body")
     if ladder is None and re.match(r"(\s*//[^\n]*\n)*\s*NETWORK\b", impl, re.I):
         sys.exit(f"ERROR: {name} is ladder (starts with NETWORK), but the codesys-lad skill "
-                 "isn't installed next to codesys-st")
+                 "isn't installed next to ctrlx-engineer")
     if ladder is not None and ladder.is_ladder(impl):
         ctx = ladder.Context({**ld_ctx.var_types, **declared_types(decl, name)},
-                             ld_ctx.fb_sigs, warnings)
+                             ld_ctx.fb_sigs, warnings, ld_ctx.fn_sigs)
         ladder.build_ld(body, impl, ctx, name)
     else:
         xhtml(sub(body, "ST"), impl.strip("\n") + "\n")
@@ -336,7 +340,13 @@ def add_types(data_types, type_block: str, attrs: str, src_name, full_text: str 
             plaintext_adddata(dtp, full_text)
 
 
-def build(files, project_name):
+def function_signature(header_rest: str, decl: str, name: str):
+    """(return type, fb_signature) of a FUNCTION, for ladder function calls."""
+    m = re.match(r"\s*:\s*([^\n;/(]+)", header_rest)
+    return ((m.group(1).strip() if m else ""), fb_signature(decl, name))
+
+
+def build(files, project_name, libs=()):
     now = dt.datetime.now().replace(microsecond=0).isoformat()
     root = ET.Element(q("project"))
     sub(root, "fileHeader", companyName="", productName="CODESYS",
@@ -352,14 +362,19 @@ def build(files, project_name):
     sub(instances, "configurations")
     gvls = []
     sources = {path: Path(path).read_text(encoding="utf-8-sig") for path in files}
+    lib_sources = [Path(path).read_text(encoding="utf-8-sig") for path in libs]
 
     # Ladder boxes need the FB interfaces (power-flow pins) and instance types up front
     ld_ctx = ladder.Context({}, {}, warnings) if ladder else None
-    for src in sources.values():
+    for src in [*lib_sources, *sources.values()]:
         for m in POU_RE.finditer(src):
-            if ld_ctx and m.group(2).upper() == "FUNCTION_BLOCK":
+            kind = m.group(2).upper()
+            if ld_ctx and kind in ("FUNCTION_BLOCK", "FUNCTION"):
                 decl, _ = split_decl_body(m.group(5))
-                ld_ctx.fb_sigs[m.group(3).upper()] = fb_signature(decl, m.group(3))
+                if kind == "FUNCTION_BLOCK":
+                    ld_ctx.fb_sigs[m.group(3).upper()] = fb_signature(decl, m.group(3))
+                else:
+                    ld_ctx.fn_sigs[m.group(3).upper()] = function_signature(m.group(4), decl, m.group(3))
         for m in GVL_RE.finditer(POU_RE.sub("", src)) if ld_ctx else ():
             ld_ctx.var_types.update(declared_types(m.group(0), "GVL"))
 
@@ -406,9 +421,11 @@ def main():
     ap.add_argument("files", nargs="+")
     ap.add_argument("-o", "--output", required=True)
     ap.add_argument("--name", default=None, help="project name in contentHeader")
+    ap.add_argument("--lib", action="append", default=[], metavar="FILE",
+                    help="library POU declarations, read for ladder calls only (repeatable)")
     a = ap.parse_args()
     try:
-        root = build(a.files, a.name or Path(a.output).stem)
+        root = build(a.files, a.name or Path(a.output).stem, a.lib)
     except Exception as e:
         if ladder is None or not isinstance(e, ladder.LadderError):
             raise

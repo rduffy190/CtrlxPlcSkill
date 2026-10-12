@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression test for the codesys-st scripts:
+# Regression test for the ctrlx-engineer scripts:
 #  1. st_to_plcopenxml.py on fixtures covering every construct it converts (DUTs, GVL kinds, FB/FUNCTION/
 #     PROGRAM, all var blocks), checked structurally (check_st.py), against the PLCopen schema, and for
 #     the expected warnings;
