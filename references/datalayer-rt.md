@@ -18,7 +18,9 @@ It replaces tedious I/O mapping: the PLC finds each value by **name** at runtime
 - `bool8` is one byte (0/1). All values are little-endian, the same as the PLC.
 - Map names are paths. In motion they look like `Ax1/ActualPos` (`<axis>/<field>`). EtherCAT names are dotted (`<device>.<signal>`, see the example).
 
-**Look at the real map first.** Use the `ctrlx-rest` skill: `dl.py rtmap <node>` lists the variables sorted by offset, and `dl.py rtdata <node>` decodes the live buffer. Write down the exact names before you write the lookup table.
+**Cyclic axis status (`motion/realtime/cyclicStatusData`): no REST look needed while writing.** The per-axis field layout is the same on every controller, so you don't have to read the map over REST before writing the code. The PLC code still reads the live map at runtime, as in the architecture below: it confirms every offset by name and gets the revision for `BeginAccess`. Never hard-code offsets or a revision. The field names and types are in `ctrlx-rest/references/rt-nodes.md`, and the house implementation is the worked example below. Only the axis names are unique per machine: take them from the user or the project's axis config, never from an example.
+
+**Any other RT node: look at the real map first.** Use the `ctrlx-rest` skill: `dl.py rtmap <node>` lists the variables sorted by offset, and `dl.py rtdata <node>` decodes the live buffer. Write down the exact names before you write the lookup table. That needs the controller's IP: ask the user for it if they haven't given it.
 
 ## PLC API
 
