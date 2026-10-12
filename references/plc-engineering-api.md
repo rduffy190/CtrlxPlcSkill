@@ -54,6 +54,11 @@ GET returns `{name, elementType, id, children:[names], elementProperties:{build:
 - A deleted program stays in `pouCalls` and breaks the build ("Identifier 'PRG_X' not defined, Object: MainTask"). Fix the task when you replace programs.
 - `BuildJob` action: the spec's enum says `GenerateCodeJob`, but the example and the live server use **`"GenerateCode"`**, which works.
 - The build result gives the error **text** for errors, but only a **count** for warnings. Ask the user to look at warnings in the IDE's message view.
+- **Ladder (LD) can't go through the API.** POST of a POU with `"language":"LD"` gives 400 "Language type 'LD' is not supported", even though the spec's `Language` enum lists LD (and FBD, CFC, SFC, IL). Only ST is accepted. **If the project has any ladder, the whole project goes in as one PLCopenXML.** Don't push the ST parts separately. Compile every object (ST and ladder) with `st_to_plcopenxml.py` into one file, as before, and load it with `plceng.py import-xml <file.xml>`, which picks the route:
+  1. **PLC Engineering runs on this machine** (the open project's file is visible here; a localhost URL through the SSH tunnel does NOT count): the import job reads the local file directly.
+  2. **The user provides a shared folder** both machines can reach: `import-xml <file.xml> --shared <local-dir> <pc-dir>` copies the file there and imports it from the PC's path for it.
+  3. **Otherwise, prompt the user to load the export by hand** (Project → Import PLCopenXML…) and wait for them to confirm. Then run `plceng.py build` and fix the errors. `import-xml` exits with code 3 and says so.
+  `plceng.py push` refuses a file set that contains ladder (exit 4).
 - **`ImportPlcOpenXmlJob` reads the file from the engineering PC's disk** (`filePath` is a Windows directory there), and so do export, import, project open and save-as. There's no upload endpoint. From another machine, push `.st` objects with POST/PUT instead (`plceng.py push`), or have the user copy the XML to the PC.
 
 ## Errors

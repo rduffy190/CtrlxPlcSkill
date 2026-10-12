@@ -63,6 +63,31 @@ try:
     r = run("push", *files)
     check("second push updates in place", "UPDATE FB_All [POU]" in r.stdout and "CREATE" not in r.stdout, r.stdout)
 
+    ld = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_ld_{port}.st")
+    with open(ld, "w") as fh:
+        fh.write("PROGRAM PRG_Ld\nVAR\n    bA : BOOL;\nEND_VAR\nNETWORK\n    bA --( bA )\nEND_PROGRAM\n")
+    r = run("push", *files, ld, "--prune", ok=False)
+    os.remove(ld)
+    check("any ladder: nothing is pushed, whole project goes as one XML", r.returncode == 4
+          and "NOT PUSHED" in r.stdout and "PRG_Ld" in r.stdout and "UPDATE" not in r.stdout
+          and "DELETE" not in r.stdout, r.stdout + r.stderr)
+
+    # import-xml: remote PC (project path not visible here) -> manual import message, exit 3
+    tmp = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_imp_{port}")
+    os.makedirs(os.path.join(tmp, "local"), exist_ok=True)
+    os.makedirs(os.path.join(tmp, "share"), exist_ok=True)
+    xml = os.path.join(tmp, "local", "Ladder.xml")
+    with open(xml, "w") as fh:
+        fh.write("<project/>")
+    r = run("import-xml", xml, ok=False)
+    check("import-xml, remote PC: asks for a manual import", r.returncode == 3 and "MANUAL IMPORT NEEDED" in r.stdout
+          and "Import PLCopenXML" in r.stdout and "--shared" in r.stdout, r.stdout + r.stderr)
+    # shared folder: copied to <local-dir>, job reads <pc-dir> (the mock "PC" is this machine)
+    r = run("import-xml", xml, "--shared", os.path.join(tmp, "share"), os.path.join(tmp, "share"))
+    check("import-xml --shared copies the file and imports from the PC path",
+          r.returncode == 0 and os.path.isfile(os.path.join(tmp, "share", "Ladder.xml")) and "Imported" in r.stdout,
+          r.stdout + r.stderr)
+
     r = run("task", "MainTask", "PRG_Test")
     calls = get(f"{APP}/task-config/MainTask")["pouCalls"]
     check("task replaces the call list (PUT appends)", [c["name"] for c in calls] == ["PRG_Test"], calls)
@@ -76,6 +101,19 @@ try:
     check("build waits for the job and prints the result", r.returncode == 0 and "0 errors" in r.stdout, r.stdout)
     r = run("get", f"{APP}/NoSuchPou", ok=False)
     check("missing element: error with the server's description", r.returncode and "not found in project" in r.stderr, r.stderr)
+    s2 = socket.socket()
+    s2.bind(("127.0.0.1", 0))
+    port2 = s2.getsockname()[1]
+    s2.close()
+    mock2 = subprocess.Popen([sys.executable, os.path.join(HERE, "mock_plceng.py"), str(port2), xml],
+                             stdout=subprocess.PIPE, text=True)
+    mock2.stdout.readline()
+    r = subprocess.run([sys.executable, "-I", P, "import-xml", xml], capture_output=True, text=True,
+                       env=dict(env, PLCENG_URL=f"127.0.0.1:{port2}"))
+    mock2.terminate()
+    check("import-xml, same machine: imports the local file directly", r.returncode == 0 and "Imported" in r.stdout,
+          r.stdout + r.stderr)
+
     r = subprocess.run([sys.executable, "-I", P, "info"], capture_output=True, text=True,
                        env={k: v for k, v in env.items() if k != "PLCENG_URL"})
     check("no PLCENG_URL: asks for the engineering PC's IP", r.returncode and "ask the user for the IP" in r.stderr, r.stderr)
@@ -87,5 +125,7 @@ try:
     check("bare <ip>:<port> is accepted", r.returncode == 0 and "4.6.2" in r.stdout, r.stderr)
 finally:
     mock.terminate()
+    import shutil
+    shutil.rmtree(os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_imp_{port}"), ignore_errors=True)
 
 sys.exit(1 if fails else 0)

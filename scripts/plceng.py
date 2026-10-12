@@ -9,7 +9,9 @@ Interface notes: references/plc-engineering-api.md. Full spec: references/plc-en
   plceng.py push <file.st> ... [--prune] [--dry-run]
                                               create or update DUTs/GVLs/FUNCTIONs/FBs/PROGRAMs from .st
                                               files (the same format st_to_plcopenxml.py takes);
-                                              --prune also deletes POU/DUT/GVL/ITF objects not in the files
+                                              --prune also deletes POU/DUT/GVL/ITF objects not in the files.
+                                              ST only: if ANY file has ladder (a body starting NETWORK), nothing
+                                              is pushed; compile everything to one PLCopenXML and import-xml it
   plceng.py delete <path>                     delete an element and its children
   plceng.py task <task> <PRG> [<PRG> ...]     set the programs a task calls (replaces the list)
   plceng.py lib-find <text>                   search the System library repository
@@ -18,6 +20,12 @@ Interface notes: references/plc-engineering-api.md. Full spec: references/plc-en
   plceng.py build                             build the active application, print errors/warnings
   plceng.py save                              save the project
   plceng.py export-xml <path> <winDir> <file> export an element as PLCopenXML on the ENGINEERING PC
+  plceng.py import-xml <file.xml> [--shared <local-dir> <pc-dir>] [--node <path>]
+                                              import PLCopenXML (e.g. ladder) into --node (default the app).
+                                              The import job reads from the PC's disk, so this works only when
+                                              PLC Engineering runs on this machine, or through a shared folder
+                                              (copied to <local-dir>, read by the PC as <pc-dir>). Otherwise it
+                                              exits telling the agent to ask the user to import by hand.
   plceng.py job '<json>'                      run any job ({"jobType":..., "jobParameters":{...}})
 
 Paths are element paths below /devices, e.g. "Device/Plc Logic/Application/PRG_Main"; a leading
@@ -220,6 +228,15 @@ def load_objects(files):
 def cmd_push(args, app):
     prune, dry = "--prune" in args, "--dry-run" in args
     objs = load_objects([a for a in args if not a.startswith("--")])
+    ladder = [o["name"] for o in objs if o["kind"] in ("FUNCTION_BLOCK", "FUNCTION", "PROGRAM")
+              and pou_parts(o["lines"])[1].lstrip().startswith("NETWORK")]
+    if ladder:
+        # The API accepts ST only ("Language type 'LD' is not supported"). With any ladder, the whole
+        # project goes in as one PLCopenXML, never part pushed and part imported.
+        print(f"NOT PUSHED: ladder in {', '.join(ladder)}. Compile ALL the files (ST and ladder) into one "
+              "PLCopenXML with st_to_plcopenxml.py and load it with 'plceng.py import-xml' (by hand when the "
+              "PC is remote), then build.")
+        return 4
     existing = {}
     for child in http("GET", dev(app)).get("children") or []:
         existing[child] = http("GET", dev(f"{app}/{child}")).get("elementType")
@@ -283,6 +300,34 @@ def cmd_lib_add(name, version, app):
     r = http("POST", dev(f"{app}/library-manager"), dict(lib, elementType="Library"))
     print(r.get("displayName"), "-", r.get("resolutionInfo"))
     return 0
+
+
+def same_machine():
+    """True when PLC Engineering runs on this machine: the open project's file is visible here.
+    A localhost URL alone doesn't prove it, because a reverse SSH tunnel also looks like localhost."""
+    path = (http("GET", "projects/current") or {}).get("path") or ""
+    return bool(path) and os.path.exists(path)
+
+
+def cmd_import_xml(xml, shared, node):
+    import shutil
+    xml = os.path.abspath(xml)
+    if not os.path.isfile(xml):
+        sys.exit(f"{xml}: no such file")
+    if shared:
+        local_dir, pc_dir = shared
+        shutil.copy2(xml, os.path.join(local_dir, os.path.basename(xml)))
+        file_path = pc_dir
+    elif same_machine():
+        file_path = os.path.dirname(xml)
+    else:
+        print(f"MANUAL IMPORT NEEDED: PLC Engineering runs on another PC and can't read {xml}.\n"
+              "Ask the user to import it by hand (Project > Import PLCopenXML...) and wait for them to confirm, "
+              "then run 'plceng.py build' and fix the errors. Or, if the user gives a folder both machines "
+              "can reach, rerun with --shared <local-dir> <pc-dir>.")
+        return 3
+    return print_job(run_job({"jobType": "ImportPlcOpenXmlJob", "jobParameters": {
+        "nodeUrl": "/" + dev(node), "filePath": file_path, "fileName": os.path.basename(xml)}}))
 
 
 def tree(path, depth, indent=0):
@@ -351,6 +396,14 @@ def main(argv):
         elif cmd == "export-xml":
             return print_job(run_job({"jobType": "ExportPlcOpenXmlJob", "jobParameters": {
                 "nodeUrl": "/" + dev(rest[0]), "filePath": rest[1], "fileName": rest[2]}}))
+        elif cmd == "import-xml":
+            shared = None
+            if "--shared" in rest:
+                i = rest.index("--shared")
+                shared = rest[i + 1:i + 3]
+                del rest[i:i + 3]
+            node = opt(rest, "--node", app)
+            return cmd_import_xml(rest[0], shared, node)
         elif cmd == "job":
             return print_job(run_job(json.loads(rest[0])))
         else:
