@@ -31,8 +31,8 @@ The PLC runs your code top to bottom every scan, usually every 1–20 ms, foreve
 - **Call every sub-FB instance every scan, unconditionally, after the logic and before the outputs.** Timers and your own FBs only update when called, so calling `_fbTimer` inside an `IF` or `CASE` freezes it when the condition goes false, which is a classic bug. Drive its inputs from the state (`IN := _eState = E_X.Filling`) and call it once, after the logic.
 - **Outputs are written last, after every sub-FB call.** The order at the end of every POU is: sub-FB calls, then all output writes (command values and copies of internal values). Any output that passes on a sub-FB result (a timer's `Q`, a child's `Done`/`Error`/status) then carries this scan's value, not last scan's, and there's exactly one place to look for what a POU drives.
 - **Write every sequence in the house structure. This one isn't optional.** The sections run in this order:
-  1. **jumps**: fault, timeout and abort go to `Faulted`/`Aborting`;
-  2. **transitions**: a `CASE` containing only state changes;
+  1. **transitions**: a `CASE` containing only state changes;
+  2. **jumps**: fault, timeout and abort go to `Faulted`/`Aborting`, overriding whatever the transitions chose;
   3. **on change**: `IF eState <> _eLastState`, holding the common actions and then the per-state entry actions;
   4. **cyclic**: all sub-FB calls (inputs driven from the state), then all outputs last (command values as boolean expressions of the state, and copies of internal values).
 

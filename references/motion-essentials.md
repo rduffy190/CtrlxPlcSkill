@@ -41,13 +41,7 @@ VAR CONSTANT
     CMD_ABORTED     : STRING := 'ABORTED';
 END_VAR
 
-// ===== 1. Jumps =====
-IF _eState = E_MoveState.Moving AND (NOT _bAccepted OR _stCmdState.Out.Error
-                                    OR _stCmdState.Out.State = CMD_ABORTED) THEN
-    _eState := E_MoveState.Faulted;          // _stPosAbs.Out.ErrorID / _stCmdState.Out.ErrorID hold the reason
-END_IF
-
-// ===== 2. Transitions =====
+// ===== 1. Transitions =====
 CASE _eState OF
     E_MoveState.Idle:    IF bExecute THEN _eState := E_MoveState.Moving; END_IF
     E_MoveState.Moving:  IF _stCmdState.Out.State = CMD_DONE THEN _eState := E_MoveState.Done; END_IF
@@ -56,6 +50,13 @@ CASE _eState OF
 ELSE
     _eState := E_MoveState.Faulted;
 END_CASE
+
+// ===== 2. Jumps =====
+// _eLastState: the submit result belongs to the step the scan started in, not one a transition just chose
+IF _eLastState = E_MoveState.Moving AND (NOT _bAccepted OR _stCmdState.Out.Error
+                                        OR _stCmdState.Out.State = CMD_ABORTED) THEN
+    _eState := E_MoveState.Faulted;          // _stPosAbs.Out.ErrorID / _stCmdState.Out.ErrorID hold the reason
+END_IF
 
 // ===== 3. On change =====
 IF _eState <> _eLastState THEN

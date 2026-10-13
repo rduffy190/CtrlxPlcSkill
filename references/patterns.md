@@ -3,7 +3,7 @@
 These are reference implementations that show structure and house style. Adapt the names, faults and features to the request, but keep the **sequence structure** in section 1, because it exists to avoid a whole class of easy bugs.
 
 ## Contents
-1. Sequence structure (jumps → transitions → on change → cyclic)
+1. Sequence structure (transitions → jumps → on change → cyclic)
 2. Motor with run-feedback fault
 3. Analog scaling
 4. Latched alarm with reset
@@ -16,15 +16,15 @@ Every sequence is written in the same four sections, in this order:
 
 | # | Section | Contains | Must not contain |
 |---|---|---|---|
-| 1 | **Jumps** | Overriding transitions that apply in many states: fault, step timeout, abort request. They go to `Faulted` / `Aborting` and record the fault. | Outputs, normal step-to-step logic |
-| 2 | **Transitions** | A `CASE` with **only** state changes: `IF <condition> THEN _eState := ...`. | Outputs, actions, FB calls |
+| 1 | **Transitions** | A `CASE` with **only** state changes: `IF <condition> THEN _eState := ...`. | Outputs, actions, FB calls |
+| 2 | **Jumps** | Overriding transitions that apply in many states: fault, step timeout, abort request. They go to `Faulted` / `Aborting` and record the fault. | Outputs, normal step-to-step logic |
 | 3 | **On change** | `IF _eState <> _eLastState THEN`. Inside: first the actions common to *every* change (restart the step timer, clear the timeout), then a `CASE` of one-shot **entry actions** for the state just entered (set its timeout, latch a recipe value, issue an `ML_` command…). It ends with `_eLastState := _eState`. | State changes, cyclic outputs |
 | 4 | **Cyclic** | First every sub-FB call, with its inputs (`IN`, `Execute` bits, setpoints) driven from the current state. Then, **last**, every output: command values as expressions of the state, and copies of internal values. | State changes, reading outputs, any output write before a sub-FB call |
 
 Why the sections matter:
-- **Jumps first and in one place.** "Fault from any state" is written once, so no step can forget to check it. Their priority (fault > timeout > abort) is explicit. The transitions then run as normal on the state the jump set. That's correct by construction, because exits from `Faulted`/`Aborting` are held conditions, so if one fires in the same scan it would have fired a scan later anyway. Don't add a "jumped" flag to skip them.
-- **Transitions only in the CASE.** You can read the whole flow chart from one block. A state is never changed from inside an action.
-- **On change after the transitions.** Entry actions run on the same scan as the transition, for the state the sequence actually ended up in. A state that's only passed through within one scan (a transition overridden by a jump) never runs its entry actions. One-shot work can't be repeated, because it's fenced off by `_eState <> _eLastState`.
+- **Transitions only in the CASE.** You can read the whole flow chart from one block. A state is never changed from inside an action. The CASE runs on the state the scan started in.
+- **Jumps after the transitions, and in one place.** The priority reads top to bottom: whatever the transitions chose, a jump overrides it, because it writes last. "Fault from any state" is written once, so no step can forget to check it, and the jumps' own priority (fault > timeout > abort) is the order of the ELSIF chain. `_eLastState` still holds the step the scan started in, and that's the step a jump's condition belongs to. So a jump limited to some states tests `_eLastState`, never `_eState`: a step a transition has just chosen hasn't run its entry actions yet, and its feedback (a sub-FB's `Error`, a command result) is still the previous step's. Record the fault's step as `_eLastState` too. The `_eState <> Faulted` guard is the one test on `_eState`, so a `Faulted` set by the transitions' `ELSE` isn't overwritten.
+- **On change after the jumps.** Entry actions run on the same scan as the transition or jump, for the state the sequence actually ended up in. A state that's only passed through within one scan (a transition overridden by a jump) never runs its entry actions, so no "jumped" flag is needed. One-shot work can't be repeated, because it's fenced off by `_eState <> _eLastState`.
 - **Cyclic last.** Outputs are a function of the final state, so they never lag a scan behind a jump to `Faulted`. Writing each command as an expression of the state (`bClampCmd := _eState = Clamping OR _eState = Working`) gives each output exactly one writer. It also can't stay latched after the sequence leaves a step.
 - **Never read your own outputs.** The state, fault code and any other value the logic depends on live in internal `_` variables, and the outputs are only copies written at the end of the cyclic section. A caller can write an FB's outputs from outside, so reading them back makes the logic depend on something it doesn't own.
 - **Sub-FB calls come first in the cyclic section, every scan**, never inside a CASE or IF. A timer or Execute/Done FB that isn't called stops updating.
@@ -107,23 +107,7 @@ END_VAR
 ```
 
 ```iecst
-// ===== 1. Jumps: highest priority first =====
-IF _eState <> E_CycleState.Faulted THEN
-    IF bExternalFault THEN
-        _uiFaultCode := FAULT_EXTERNAL;
-        _eFaultState := _eState;
-        _eState := E_CycleState.Faulted;
-    ELSIF _fbStepTimer.Q THEN
-        // The step timer belongs to the current step, so this one check covers every step's timeout
-        _uiFaultCode := FAULT_STEP_TIMEOUT;
-        _eFaultState := _eState;
-        _eState := E_CycleState.Faulted;
-    ELSIF bAbort AND (_eState = E_CycleState.Clamping OR _eState = E_CycleState.Working) THEN
-        _eState := E_CycleState.Aborting;
-    END_IF
-END_IF
-
-// ===== 2. Transitions only =====
+// ===== 1. Transitions only =====
 CASE _eState OF
     E_CycleState.Idle:
         IF bExecute AND NOT bAbort THEN
@@ -166,6 +150,22 @@ ELSE
     _eFaultState := _eState;
     _eState := E_CycleState.Faulted;
 END_CASE
+
+// ===== 2. Jumps: override the transitions, highest priority first =====
+IF _eState <> E_CycleState.Faulted THEN
+    IF bExternalFault THEN
+        _uiFaultCode := FAULT_EXTERNAL;
+        _eFaultState := _eLastState;    // the step the scan started in
+        _eState := E_CycleState.Faulted;
+    ELSIF _fbStepTimer.Q THEN
+        // The step timer belongs to the step the scan started in, so this one check covers every step's timeout
+        _uiFaultCode := FAULT_STEP_TIMEOUT;
+        _eFaultState := _eLastState;
+        _eState := E_CycleState.Faulted;
+    ELSIF bAbort AND (_eLastState = E_CycleState.Clamping OR _eLastState = E_CycleState.Working) THEN
+        _eState := E_CycleState.Aborting;
+    END_IF
+END_IF
 
 // ===== 3. On change: common actions, then entry actions of the new state =====
 IF _eState <> _eLastState THEN
@@ -213,7 +213,7 @@ eFaultState := _eFaultState;
 Notes:
 - **A start/stop machine** (not a one-shot cycle) uses the same idea. For example, `Stopped` holds until `bStart` is released, so a start button held through a stop doesn't restart the machine.
 - **Re-entering the same step** (e.g. retrying) isn't a change, so its entry actions don't run. Route through a separate retry step instead.
-- **The first fault is kept, and `Idle` means no fault.** The jump section skips `Faulted`, so later faults don't overwrite `_uiFaultCode`/`_eFaultState`. Both are cleared on entry to `Idle`. A fault only exists while the command that led to it is still active: `Faulted` can't be left while `bExecute` is TRUE. Once the command is removed and the fault is reset, the sequence is back in `Idle` with nothing wrong, so there's no fault to show.
+- **The first fault is kept, and `Idle` means no fault.** The jump section skips `Faulted` (including a `Faulted` the transitions' `ELSE` just set), so later faults don't overwrite `_uiFaultCode`/`_eFaultState`. Both are cleared on entry to `Idle`. A fault only exists while the command that led to it is still active: `Faulted` can't be left while `bExecute` is TRUE. Once the command is removed and the fault is reset, the sequence is back in `Idle` with nothing wrong, so there's no fault to show.
 - **Calling Execute/Done FBs (CXA, `MC_`) from a sequence** is the same handshake from the other side. Set their `Execute` in the cyclic section from the state (`_fbMove.Execute := _eState = E_X.Moving`), call the FB there every scan, and use `Done` in the transition CASE and `Error` in the jumps. Leaving the step drops `Execute`, which re-arms the FB.
 
 ---

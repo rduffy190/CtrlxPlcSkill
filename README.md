@@ -35,7 +35,7 @@ Optional companions, cloned next to it:
 |---|---|
 | `SKILL.md` | The skill: design rules, house sequence structure, output format, when to read what |
 | `references/conventions.md` | Naming and style (prefixes, var block order) |
-| `references/patterns.md` | Sequence template (jumps, transitions, on change, cyclic) and common building blocks |
+| `references/patterns.md` | Sequence template (transitions, jumps, on change, cyclic) and common building blocks |
 | `references/motion-essentials.md`, `references/motion/` | ctrlX MOTION: PLC interfaces, command handling, Motion App manual chapters 4–7 |
 | `references/libs/` | ctrlX PLC Libraries reference book, one file per library, with an `INDEX.md` |
 | `references/datalayer-rt.md` | Reading Data Layer RT nodes and memory maps |
