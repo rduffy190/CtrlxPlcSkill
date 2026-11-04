@@ -29,7 +29,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Ladder (LD) bodies are compiled by the codesys-lad skill, next to this one in the skills folder
-sys.path.append(str(Path(__file__).resolve().parents[2] / "codesys-lad" / "scripts"))
+for _base in (Path(__file__).absolute().parents[2], Path(__file__).resolve().parents[2]):
+    # the skills folder may hold symlinks: look next to the script as it was called and next to the real file
+    sys.path.append(str(_base / "codesys-lad" / "scripts"))
 try:
     import ladder
 except ImportError:
