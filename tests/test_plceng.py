@@ -4,6 +4,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 
@@ -63,7 +64,7 @@ try:
     r = run("push", *files)
     check("second push updates in place", "UPDATE FB_All [POU]" in r.stdout and "CREATE" not in r.stdout, r.stdout)
 
-    ld = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_ld_{port}.st")
+    ld = os.path.join(tempfile.gettempdir(), f"plceng_ld_{port}.st")
     with open(ld, "w") as fh:
         fh.write("PROGRAM PRG_Ld\nVAR\n    bA : BOOL;\nEND_VAR\nNETWORK\n    bA --( bA )\nEND_PROGRAM\n")
     r = run("push", *files, ld, "--prune", ok=False)
@@ -73,7 +74,7 @@ try:
           and "DELETE" not in r.stdout, r.stdout + r.stderr)
 
     # import-xml: remote PC (project path not visible here) -> manual import message, exit 3
-    tmp = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_imp_{port}")
+    tmp = os.path.join(tempfile.gettempdir(), f"plceng_imp_{port}")
     os.makedirs(os.path.join(tmp, "local"), exist_ok=True)
     os.makedirs(os.path.join(tmp, "share"), exist_ok=True)
     xml = os.path.join(tmp, "local", "Ladder.xml")
@@ -126,6 +127,6 @@ try:
 finally:
     mock.terminate()
     import shutil
-    shutil.rmtree(os.path.join(os.environ.get("TMPDIR", "/tmp"), f"plceng_imp_{port}"), ignore_errors=True)
+    shutil.rmtree(os.path.join(tempfile.gettempdir(), f"plceng_imp_{port}"), ignore_errors=True)
 
 sys.exit(1 if fails else 0)

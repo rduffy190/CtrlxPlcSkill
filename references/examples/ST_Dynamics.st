@@ -1,4 +1,4 @@
-// Type needed to build references/examples/FB_AxisCtrl.st (AXIS_REF, MC_* and ERROR_CODE come from libraries).
+// Type needed by FB_AxisCtrl.st (ST here, ladder in codesys-lad) (AXIS_REF, MC_* and ERROR_CODE come from libraries).
 TYPE ST_Dynamics :
 STRUCT
     lrVel   : LREAL;

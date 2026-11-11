@@ -9,6 +9,8 @@
 #     (skipped if the PDFs or pdftotext are missing).
 # The ladder side is tested by ../codesys-lad/tests/run.sh. Exits non-zero on any failure.
 set -euo pipefail
+# On Windows, python3 is often only the Microsoft Store alias: fall back to python.
+python3 -c "" 2>/dev/null || python3() { python "$@"; }
 ST="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
@@ -25,7 +27,7 @@ for w in "kept only in the plain-text declaration" "GVL_Test.stPair: structured 
 done
 
 echo "== converter: shipped example FB_AxisCtrl"
-python3 "$ST/scripts/st_to_plcopenxml.py" ST_Dynamics.st "$ST/references/examples/FB_AxisCtrl.st" -o "$OUT/axis.xml" 2>/dev/null
+python3 "$ST/scripts/st_to_plcopenxml.py" "$ST/references/examples/ST_Dynamics.st" "$ST/references/examples/FB_AxisCtrl.st" -o "$OUT/axis.xml" 2>/dev/null
 python3 "$ST/scripts/validate_plcopen.py" "$OUT/axis.xml"
 
 echo "== plceng.py: PLC Engineering API client against the mock"

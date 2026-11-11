@@ -1,31 +1,26 @@
 # ctrlx-engineer
 
-A [Claude Code](https://claude.com/claude-code) skill for writing PLC code in IEC 61131-3 Structured Text for Bosch Rexroth **ctrlX CORE** (ctrlX PLC Engineering) and other CODESYS V3 controllers.
+An agent skill (`SKILL.md` format) for writing PLC code in IEC 61131-3 Structured Text for Bosch Rexroth **ctrlX CORE** (ctrlX PLC Engineering) and other CODESYS V3 controllers.
 
-With it, Claude writes paste-ready POUs (programs, function blocks, functions), DUTs and GVLs in a fixed house style. It can also build the result into a PLCopenXML file for **Project → Import PLCopenXML…**. It covers sequences and state machines, ctrlX MOTION (MC_/ML_ commands), Data Layer real-time memory maps, I/O, alarms, interlocks, scaling and more, and it looks up the ctrlX library and Motion App manuals as it goes.
-
-For ladder diagram (LD), install [codesys-lad](https://github.com/rduffy190/CtrlxLadderSkill) next to this skill.
+An agent using it writes paste-ready POUs (programs, function blocks, functions), DUTs and GVLs in a fixed house style. It can also build the result into a PLCopenXML file for **Project → Import PLCopenXML…**, or push it into an open ctrlX PLC Engineering project over its REST API. It covers sequences and state machines, ctrlX MOTION (MC_/ML_ commands), Data Layer real-time memory maps, I/O, alarms, interlocks, scaling and more, and it looks up the ctrlX library and Motion App manuals as it goes.
 
 ## Install
 
-Clone into your Claude Code skills folder, under this exact name:
+Put this folder in the skills directory your agent loads skills from, under the folder name `ctrlx-engineer`. The agent picks it up from the `SKILL.md` description when asked for PLC logic ("write a function block for a pump with run feedback").
 
-```bash
-git clone git@github.com:rduffy190/CtrlxPlcSkill.git ~/.claude/skills/ctrlx-engineer
-```
+The scripts also work on their own, without an agent (see below).
 
-Claude Code picks the skill up automatically. Ask for PLC logic ("write a function block for a pump with run feedback") and it's used.
+Companion skills, installed in the same skills directory:
 
-Optional companions, cloned next to it:
-
-| Skill | Folder | Adds |
-|---|---|---|
-| [codesys-lad](https://github.com/rduffy190/CtrlxLadderSkill) | `~/.claude/skills/codesys-lad` | Ladder (LD) POUs, built through this skill's converter |
-| ctrlx-rest | `~/.claude/skills/ctrlx-rest` | Reading a live controller's Data Layer (node paths, RT memory maps) |
+| Skill | Adds |
+|---|---|
+| `codesys-lad` | Ladder (LD) POUs, built through this skill's converter. Needs this skill next to it. |
+| `ctrlx-rest` | Reading a live controller's Data Layer (node paths, RT memory maps) and configuring axes |
+| `ctrlx-hmi` | WebVisu screens for the Cmd/Sts structs this skill writes |
 
 ## Requirements
 
-- Python 3.10+. The converter uses only the standard library.
+- Python 3.10+. The converter uses only the standard library. (On Windows, run the scripts with `python` or `py -3` where the docs say `python3`.)
 - `lxml` for the schema check (`pip install lxml`).
 - poppler-utils and mupdf-tools, only to regenerate the manual references.
 
@@ -36,21 +31,24 @@ Optional companions, cloned next to it:
 | `SKILL.md` | The skill: design rules, house sequence structure, output format, when to read what |
 | `references/conventions.md` | Naming and style (prefixes, var block order) |
 | `references/patterns.md` | Sequence template (transitions, jumps, on change, cyclic) and common building blocks |
+| `references/platforms.md` | Differences between ctrlX CORE and other CODESYS targets |
 | `references/motion-essentials.md`, `references/motion/` | ctrlX MOTION: PLC interfaces, command handling, Motion App manual chapters 4–7 |
 | `references/libs/` | ctrlX PLC Libraries reference book, one file per library, with an `INDEX.md` |
-| `references/datalayer-rt.md` | Reading Data Layer RT nodes and memory maps |
+| `references/datalayer-rt.md` | Reading Data Layer RT nodes and memory maps from the PLC |
 | `references/plcopenxml.md` | The PLCopenXML format as CODESYS and ctrlX PLC Engineering write it |
-| `references/examples/FB_AxisCtrl.st` | A ready ctrlX MC_ axis wrapper in ST (power, move, halt, reset, latched diagnosis) |
+| `references/plc-engineering-api.md`, `-v2.json` | PLC Engineering REST API notes and its OpenAPI spec |
+| `references/examples/FB_AxisCtrl.st`, `ST_Dynamics.st` | A ready ctrlX MC_ axis wrapper in ST (power, move, halt, reset, latched diagnosis) and the type it needs |
 | `scripts/st_to_plcopenxml.py` | Builds `.st` sources (POUs, DUTs, GVLs, and ladder POUs via codesys-lad) into one import file |
 | `scripts/validate_plcopen.py` | Checks a PLCopenXML file against the PLCopen TC6 schema (downloads it once) |
+| `scripts/plceng.py` | PLC Engineering REST API client: push ST, add libraries and task calls, build, save |
 | `scripts/pdf_to_libref.py` | Regenerates `references/libs/` and `references/motion/` from the Rexroth PDFs |
-| `tests/run.sh`, `tests/fixtures/` | Regression suite: converter fixtures checked structurally and against the schema, the shipped example, and (when the PDFs are in `docs/`) a byte-for-byte check that the references regenerate identically |
+| `tests/run.sh`, `tests/fixtures/` | Regression suite: converter fixtures checked structurally and against the schema, the shipped example, `plceng.py` against a mock server, and (when the PDFs are in `docs/`) a byte-for-byte check that the references regenerate identically |
 
 ## Building an import file yourself
 
 ```bash
-python3 ~/.claude/skills/ctrlx-engineer/scripts/st_to_plcopenxml.py E_State.st GVL_IO.st FB_Pump.st PRG_Main.st -o Project.xml
-python3 ~/.claude/skills/ctrlx-engineer/scripts/validate_plcopen.py Project.xml
+python3 <skills-dir>/ctrlx-engineer/scripts/st_to_plcopenxml.py E_State.st GVL_IO.st FB_Pump.st PRG_Main.st -o Project.xml
+python3 <skills-dir>/ctrlx-engineer/scripts/validate_plcopen.py Project.xml
 ```
 
 Each `.st` file holds full source with the `END_...` keywords. A GVL file is named after the GVL.
@@ -58,7 +56,7 @@ Each `.st` file holds full source with the `END_...` keywords. A GVL file is nam
 ## Tests
 
 ```bash
-~/.claude/skills/ctrlx-engineer/tests/run.sh      # should end with ALL OK
+<skills-dir>/ctrlx-engineer/tests/run.sh      # should end with ALL OK (bash; Git Bash on Windows)
 ```
 
 ## Regenerating the manual references

@@ -46,7 +46,7 @@ The PLC runs your code top to bottom every scan, usually every 1–20 ms, foreve
 
 ## Naming and style
 
-Follow `references/conventions.md`. Read it before writing code, because it holds the user's house style and overrides any habits you have.
+Follow `references/conventions.md`. Read it before writing code, because it holds the house style and overrides any habits you have.
 
 Var blocks are always declared in this order: `VAR_INPUT`, `VAR_OUTPUT`, `VAR_IN_OUT`, `VAR`, `VAR CONSTANT`.
 
@@ -139,7 +139,7 @@ When the user wants values from a ctrlX real-time Data Layer node instead of I/O
 - the house architecture: one map FB builds a config struct of offsets, and one reader FB reads every item in a single `BeginAccess`/`EndAccess` into the output array, at the same indices;
 - the name parsing, the packed-buffer copy helper and the retry/remap handling.
 
-For the cyclic axis status, the per-axis field layout is the same on every controller, so you don't need to read the map over REST before writing. The PLC code still reads the live map at runtime, to confirm the offsets by name and get the revision for `BeginAccess`. Only the axis names differ per machine: ask for them or take them from the project. For any other RT node, inspect the real map with the `ctrlx-rest` skill (`dl.py rtmap <node>`) before writing the field table. That needs the controller IP: ask the user for it if they haven't given it.
+`datalayer-rt.md` also says when the map has to be read over REST first (any node except the cyclic axis status).
 
 ## Regression tests
 
