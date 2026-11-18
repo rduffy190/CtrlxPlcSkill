@@ -30,3 +30,7 @@ Reference Book" (R911430583) and "ctrlX Motion App Version 4, Application
 Manual" (R911430551). That content remains the property of Bosch Rexroth AG
 and is not covered by the MIT License above. It is included for reference
 only; see the original manuals for their terms.
+
+The file references/plc-engineering-api-v2.json is Bosch Rexroth AG's description of the
+ctrlX WORKS PLC Engineering API (version 2.11.0). It also remains the property of Bosch Rexroth AG and
+is not covered by the MIT License above.

@@ -65,4 +65,7 @@ The source PDFs aren't in the repo (45 MB). Download "ctrlX PLC Engineering, PLC
 
 ## License
 
-MIT, except `references/libs/` and `references/motion/`, which are generated from Bosch Rexroth manuals and remain their property. See [LICENSE](LICENSE).
+MIT, except `references/libs/`, `references/motion/` (generated from Bosch Rexroth manuals) and `references/plc-engineering-api-v2.json` (Bosch Rexroth's API description), which remain their property. See [LICENSE](LICENSE).
+
+Parts of this skill were generated and tested with Claude Opus 5.5 and Claude Sonnet 5.5, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
+
